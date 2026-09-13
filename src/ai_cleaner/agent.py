@@ -1,15 +1,13 @@
 """Tabular Q-learning agent + synthetic training environment."""
-import random
-import pickle
-import math
 
-import numpy as np
+import math
+import os  # noqa: E402 (used by load)
+import pickle
+import random
 
 from .config import QTABLE_PATH
-from .state import ext_bucket
 from .protection import GAME_EXTS
-import os  # noqa: E402 (used by load)
-
+from .state import ext_bucket
 
 
 class SyntheticFileEnv:
@@ -17,25 +15,33 @@ class SyntheticFileEnv:
         self.rng = random.Random(seed)
 
     def sample(self):
-        loc = self.rng.choices([0, 1, 2, 3, 4, 5, 6],
-                               weights=[15, 20, 15, 8, 10, 5, 27])[0]
+        loc = self.rng.choices(
+            [0, 1, 2, 3, 4, 5, 6], weights=[15, 20, 15, 8, 10, 5, 27]
+        )[0]
         if loc == 3:
             ext = 3
         elif loc == 5:
             ext = self.rng.choice([4, 5, 6])
         else:
-            ext = self.rng.choices([0, 1, 2, 3, 4, 5, 6],
-                                   weights=[15, 15, 15, 3, 10, 15, 27])[0]
+            ext = self.rng.choices(
+                [0, 1, 2, 3, 4, 5, 6], weights=[15, 15, 15, 3, 10, 15, 27]
+            )[0]
         size = self.rng.choices([0, 1, 2, 3, 4], weights=[15, 25, 30, 20, 10])[0]
         age = self.rng.choices([0, 1, 2, 3, 4], weights=[15, 20, 20, 25, 20])[0]
 
         d = 0
-        if   ext == 0 and loc in (0, 1) and age >= 2: d = 1
-        elif ext == 2 and loc in (0, 2) and age >= 1: d = 1
-        elif ext == 1 and loc == 1 and age >= 3:      d = 1
-        elif loc == 4:                                d = 1
-        elif loc == 5:                                d = 0
-        elif ext == 3 or loc == 3:                    d = 0
+        if ext == 0 and loc in (0, 1) and age >= 2:
+            d = 1
+        elif ext == 2 and loc in (0, 2) and age >= 1:
+            d = 1
+        elif ext == 1 and loc == 1 and age >= 3:
+            d = 1
+        elif loc == 4:
+            d = 1
+        elif loc == 5:
+            d = 0
+        elif ext == 3 or loc == 3:
+            d = 0
         if self.rng.random() < 0.05:
             d = 1 - d
         return (ext, size, age, loc), d
@@ -57,6 +63,7 @@ class QLearningAgent:
     Also tracks a running calibration of how well its own confidence
     predicts user acceptance, so the confidence threshold adapts.
     """
+
     SHAPE = (7, 5, 5, 7, 2)
 
     def __init__(self, alpha=0.15, epsilon=0.15):
@@ -71,8 +78,7 @@ class QLearningAgent:
     def _build(shape, default):
         if len(shape) == 1:
             return [default] * shape[0]
-        return [QLearningAgent._build(shape[1:], default)
-                for _ in range(shape[0])]
+        return [QLearningAgent._build(shape[1:], default) for _ in range(shape[0])]
 
     def _q(self, s):
         return self.Q[s[0]][s[1]][s[2]][s[3]]
@@ -109,7 +115,7 @@ class QLearningAgent:
     def record_decision(self, conf, accepted):
         """Log one user decision about an AI-flagged file."""
         if conf is None or conf >= 900:
-            return   # skip rule-flagged and screenshot entries
+            return  # skip rule-flagged and screenshot entries
         bucket = round(conf * 2) / 2.0
         if bucket not in self.conf_stats:
             self.conf_stats[bucket] = [0, 0]
@@ -149,9 +155,11 @@ class QLearningAgent:
         total = sum(s[0] for s in self.conf_stats.values())
         accepted = sum(s[1] for s in self.conf_stats.values())
         rate = accepted / total if total else 0
-        return (f"{total} decisions, "
-                f"{rate*100:.0f}% accepted, "
-                f"threshold {self.dynamic_threshold():.2f}")
+        return (
+            f"{total} decisions, "
+            f"{rate * 100:.0f}% accepted, "
+            f"threshold {self.dynamic_threshold():.2f}"
+        )
 
     # ---------- persistence ----------
 
@@ -168,11 +176,14 @@ class QLearningAgent:
     def save(self, path=QTABLE_PATH):
         try:
             with open(path, "wb") as f:
-                pickle.dump({
-                    "Q": self.Q,
-                    "counts": self.counts,
-                    "conf_stats": self.conf_stats,
-                }, f)
+                pickle.dump(
+                    {
+                        "Q": self.Q,
+                        "counts": self.counts,
+                        "conf_stats": self.conf_stats,
+                    },
+                    f,
+                )
         except Exception:
             pass
 
@@ -199,6 +210,7 @@ class QLearningAgent:
         self.Q = self._build(self.SHAPE, 0.0)
         self.counts = self._build(self.SHAPE[:-1], 0)
         self.conf_stats = {}
+
 
 def train_agent(agent, episodes=20000, seed=None):
     env = SyntheticFileEnv(seed=seed)

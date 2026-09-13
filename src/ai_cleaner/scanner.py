@@ -8,13 +8,13 @@ from PyQt5.QtCore import QThread, pyqtSignal
 
 from .protection import (
     GAME_DIRS,
-    GAME_PATH_HINTS,
     GAME_EXTS,
+    GAME_PATH_HINTS,
     in_pseudo_fs,
     in_system_path,
-    sniff_file_kind,
-    is_screenshot,
     is_dpkg_owned,
+    is_screenshot,
+    sniff_file_kind,
 )
 from .state import extract_state, plain_reason
 
@@ -49,9 +49,7 @@ class ScannerThread(QThread):
             return True
         if any(h in p for h in GAME_PATH_HINTS):
             return True
-        if path.suffix.lower() in GAME_EXTS:
-            return True
-        return False
+        return path.suffix.lower() in GAME_EXTS
 
     def _should_prune_dir(self, dirpath, dirname):
         full = os.path.join(dirpath, dirname)
@@ -59,15 +57,13 @@ class ScannerThread(QThread):
             return True
         if in_system_path(full):
             return True
-        if not self.deep_mode and dirname.startswith("."):
+        if not self.deep_mode and dirname.startswith("."):  # noqa: SIM102
             if dirname not in (".local", ".cache"):
                 return True
         low = full.lower()
         if any(g and g.lower() in low for g in GAME_DIRS):
             return True
-        if any(h in low for h in GAME_PATH_HINTS):
-            return True
-        return False
+        return bool(any(h in low for h in GAME_PATH_HINTS))
 
     def _count_files(self, root):
         n = 0
@@ -205,7 +201,7 @@ class ScannerThread(QThread):
                             "size": size,
                             "age": int(age),
                             "state": state,
-                            "confidence": "conf",
+                            "confidence": conf,
                             "reason": plain_reason(fpath, size, int(age)),
                         }
                         results.append(info)

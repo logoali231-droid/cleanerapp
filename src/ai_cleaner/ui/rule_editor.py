@@ -1,7 +1,18 @@
 """Dialog to add a single rule."""
+
+import os  # noqa: E402
+
 from PyQt5.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QLabel, QComboBox, QLineEdit,
-    QPushButton, QRadioButton, QMessageBox, QFileDialog,
+    QComboBox,
+    QDialog,
+    QFileDialog,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QMessageBox,
+    QPushButton,
+    QRadioButton,
+    QVBoxLayout,
 )
 from PyQt5.QtWidgets import QDialog as _QD
 
@@ -35,12 +46,14 @@ class RuleEditor(QDialog):
 
         v.addWidget(QLabel("2.  How do I recognize them?"))
         self.cmb_type = QComboBox()
-        self.cmb_type.addItems([
-            "Files inside a folder…",
-            "Files with a file extension…",
-            "Files whose name contains…",
-            "Files matching a wildcard…",
-        ])
+        self.cmb_type.addItems(
+            [
+                "Files inside a folder…",
+                "Files with a file extension…",
+                "Files whose name contains…",
+                "Files matching a wildcard…",
+            ]
+        )
         self.cmb_type.currentIndexChanged.connect(self._on_type_change)
         v.addWidget(self.cmb_type)
 
@@ -114,7 +127,8 @@ class RuleEditor(QDialog):
         if not os.path.isdir(start):
             start = HOME
         d = QFileDialog.getExistingDirectory(
-            self, "Pick a folder to protect", start, QFileDialog.ShowDirsOnly)
+            self, "Pick a folder to protect", start, QFileDialog.ShowDirsOnly
+        )
         if d:
             self.inp_value.setText(d)
 
@@ -122,8 +136,9 @@ class RuleEditor(QDialog):
         types = ["folder", "extension", "name_contains", "glob"]
         val = self.inp_value.text().strip()
         if not val:
-            QMessageBox.warning(self, "Missing value",
-                                "Please enter a value so I know what to match.")
+            QMessageBox.warning(
+                self, "Missing value", "Please enter a value so I know what to match."
+            )
             return
         self.result_rule = {
             "type": types[self.cmb_type.currentIndex()],
@@ -133,6 +148,3 @@ class RuleEditor(QDialog):
             "enabled": True,
         }
         self.accept()
-
-
-import os  # noqa: E402
