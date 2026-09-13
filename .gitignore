@@ -1,23 +1,6 @@
-# Python
-__pycache__/
-*.py[cod]
-*.egg-info/
-.pytest_cache/
-.venv/
-venv/
-
-# Flatpak
 builddir/
 .flatpak-builder/
 repo/
 *.flatpak
-
-# Demo/test
-ai_cleaner_demo/
-
-# VS Code
-.vscode/*.log
-
-# OS
-.DS_Store
-Thumbs.db
+.flatpak-builder/
+.__pycache__
