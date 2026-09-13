@@ -1,25 +1,20 @@
 #!/usr/bin/env bash
-# Installer for AI File Cleaner — makes it appear in the Linux Mint menu
+# Installer for AI File Cleaner — modular layout.
 set -e
 
 APP_ID="ai-file-cleaner"
 APP_NAME="AI File Cleaner"
 SRC_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# find the python file (either name)
-SRC_APP=""
-for candidate in "ai_cleaner_wizard.py" "ai_cleaner_rl.py"; do
-    if [ -f "$SRC_DIR/$candidate" ]; then SRC_APP="$SRC_DIR/$candidate"; break; fi
-done
-if [ -z "$SRC_APP" ]; then
-    echo "❌ Could not find ai_cleaner_wizard.py in $SRC_DIR"
+PKG_SRC="$SRC_DIR/src/ai_cleaner"
+if [ ! -d "$PKG_SRC" ]; then
+    echo "❌ Could not find $PKG_SRC"
     exit 1
 fi
 
 echo "🔍 Checking dependencies…"
 missing=()
 python3 -c "import PyQt5" 2>/dev/null || missing+=("python3-pyqt5")
-python3 -c "import numpy" 2>/dev/null || missing+=("python3-numpy")
 
 if [ ${#missing[@]} -gt 0 ]; then
     echo "📦 Installing: ${missing[*]}"
@@ -32,14 +27,15 @@ DESKTOP_DIR="$HOME/.local/share/applications"
 ICON_DIR="$HOME/.local/share/icons/hicolor/scalable/apps"
 mkdir -p "$BIN_DIR" "$APP_DIR" "$DESKTOP_DIR" "$ICON_DIR"
 
-# ---- app ----
-cp "$SRC_APP" "$APP_DIR/ai_cleaner_wizard.py"
-chmod +x "$APP_DIR/ai_cleaner_wizard.py"
+# ---- copy the package ----
+rm -rf "$APP_DIR/ai_cleaner"
+cp -r "$PKG_SRC" "$APP_DIR/ai_cleaner"
 
 # ---- launcher ----
 cat > "$BIN_DIR/$APP_ID" <<EOF
 #!/usr/bin/env bash
-exec python3 "$APP_DIR/ai_cleaner_wizard.py" "\$@"
+export PYTHONPATH="$APP_DIR:\$PYTHONPATH"
+exec python3 -m ai_cleaner "\$@"
 EOF
 chmod +x "$BIN_DIR/$APP_ID"
 
@@ -89,7 +85,6 @@ echo "✅ Installed!"
 echo ""
 echo "   ▸ Launch from your menu:  search for \"$APP_NAME\""
 echo "   ▸ Or from a terminal:     $APP_ID"
-echo "   ▸ For full-system scans:  sudo $APP_ID"
 echo ""
 echo "   Uninstall:"
 echo "     rm $BIN_DIR/$APP_ID"
