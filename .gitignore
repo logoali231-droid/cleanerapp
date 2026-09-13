@@ -3,4 +3,6 @@ builddir/
 repo/
 *.flatpak
 .flatpak-builder/
-.__pycache__.vscode/
+.__pycache__
+.vscode/
+*.deb
