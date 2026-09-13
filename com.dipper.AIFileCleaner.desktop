@@ -1,0 +1,11 @@
+[Desktop Entry]
+Name=AI File Cleaner
+GenericName=Disk Cleaner
+Comment=Find and remove unused files with a friendly AI
+Exec=ai-file-cleaner
+Icon=com.dipper.AIFileCleaner
+Terminal=false
+Type=Application
+Categories=Utility;System;FileTools;Qt;
+Keywords=cleaner;disk;cleanup;ai;files;junk;space;
+StartupNotify=true
