@@ -1,36 +1,54 @@
 """Main wizard window."""
 import os
-from collections import Counter
-import time
-import tempfile
 import subprocess
+import tempfile
+import time
+from collections import Counter
 from pathlib import Path
 
+from PyQt5.QtCore import QEventLoop, Qt, QTimer
+from PyQt5.QtGui import QBrush, QColor, QIcon, QPainter, QPixmap
 from PyQt5.QtWidgets import (
-    QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-    QPushButton, QLabel, QTableWidget, QTableWidgetItem, QCheckBox,
-    QProgressBar, QFileDialog, QMessageBox, QHeaderView,
-    QAbstractItemView, QStackedWidget, QFrame, QMenu, QComboBox,
+    QAbstractItemView,
+    QApplication,
+    QCheckBox,
+    QComboBox,
+    QFileDialog,
+    QFrame,
+    QHBoxLayout,
+    QHeaderView,
+    QLabel,
+    QMainWindow,
+    QMenu,
+    QMessageBox,
+    QProgressBar,
+    QPushButton,
+    QStackedWidget,
+    QTableWidget,
+    QTableWidgetItem,
+    QVBoxLayout,
+    QWidget,
 )
-from PyQt5.QtCore import Qt, QTimer, QEventLoop
-from PyQt5.QtGui import QColor, QIcon, QPixmap, QPainter, QBrush
 
-from ..config import HOME, IS_ROOT, CONFIG_DIR
-from ..utils import human, age, duration, short_path
-from ..rules import RulesManager
-from ..agent import QLearningAgent, train_agent, reinforce_agent_from_rule
-from ..scanner import ScannerThread
-from ..demo import create_demo_files
 from ..admin import (
-    relaunch_as_admin, find_terminal, terminal_argv, _admin_log,
+    _admin_log,
+    find_terminal,
+    relaunch_as_admin,
+    terminal_argv,
 )
+from ..agent import QLearningAgent, reinforce_agent_from_rule, train_agent
+from ..config import CONFIG_DIR, HOME, IS_ROOT
+from ..demo import create_demo_files
+from ..rules import RulesManager
+from ..scanner import ScannerThread
+from ..utils import age, duration, human, short_path
+from .rules_dialog import RulesDialog
 from .styles import QSS
 from .widgets import card, make_stat, set_bigstat
-from .rules_dialog import RulesDialog
 
 
 class Wizard(QMainWindow):
-    STEPS = ["Welcome", "Choose folder", "Scan", "Review", "Clean up", "Done"]
+    STEPS = ["Welcome", "Choose folder", "Scan", "Review", "Clean up", "Done"]  # noqa: RUF012
 
     def __init__(self, admin_mode=False, start_folder=None, start_deep=False):
         super().__init__()
@@ -641,7 +659,7 @@ class Wizard(QMainWindow):
         target = Path(d) / "ai_cleaner_demo"
         try:
             info = create_demo_files(target)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             QMessageBox.critical(self, "Oops", f"Couldn't create demo files:\n{e}")
             return
         QMessageBox.information(
@@ -659,7 +677,7 @@ class Wizard(QMainWindow):
             dlg = RulesDialog(self.rules, self)
             dlg.rules_changed.connect(self._on_rules_changed)
             dlg.exec_()
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             import traceback
             traceback.print_exc()
             QMessageBox.critical(self, "Rules manager failed",
@@ -684,7 +702,7 @@ class Wizard(QMainWindow):
             self._log(f"Rule added: {RulesManager.describe(rule)}")
             self._apply_rules_to_table()
             self._refresh_agent_info()
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             import traceback
             traceback.print_exc()
             QMessageBox.critical(self, "Couldn't add rule",
@@ -821,7 +839,7 @@ class Wizard(QMainWindow):
         try:
             if os.path.exists(sig):
                 os.remove(sig)
-        except Exception:
+        except Exception:  # noqa: BLE001, S110
             pass
 
         _admin_log(f"--- new launch, method={method}, signal={sig} ---")
@@ -890,8 +908,13 @@ class Wizard(QMainWindow):
         self.scan_counter.setText(f"{scanned:,} / {total:,} files checked")
         if cur_dir:
             self.scan_curdir.setText(short_path(cur_dir))
-        self.scan_eta.setText(f"About {duration(eta)} remaining"
-                              if eta > 0 else "Estimating…")
+        if eta < 0:
+            # Sentinel from the scanner: not enough data yet
+            self.scan_eta.setText("Calculating…")
+        elif eta < 5:
+            self.scan_eta.setText("Almost done…")
+        else:
+            self.scan_eta.setText(f"About {duration(eta)} remaining")
 
     def _on_file_found(self, info):
         self.scan_results.append(info)
@@ -958,7 +981,7 @@ class Wizard(QMainWindow):
                                  + ("\n…" if count > 20 else ""))
             self.table.setItem(r, 1, name_item)
 
-            parents = sorted(set(str(Path(f["path"]).parent) for f in group))
+            parents = sorted({str(Path(f["path"]).parent) for f in group})
             if len(parents) == 1:
                 loc_text = short_path(parents[0], 55)
             else:
@@ -1088,7 +1111,7 @@ class Wizard(QMainWindow):
                 if p.exists() and p.is_file():
                     rc = subprocess.run(
                         ["gio", "trash", "--", str(p)],
-                        stdout=subprocess.DEVNULL,
+                        check=False, stdout=subprocess.DEVNULL,
                         stderr=subprocess.DEVNULL,
                     ).returncode
                     if rc == 0:
@@ -1101,7 +1124,7 @@ class Wizard(QMainWindow):
                         freed += f["size"]
                 else:
                     skipped += 1
-            except Exception:
+            except Exception:  # noqa: BLE001
                 failed += 1
             if i % 10 == 0 or i == len(to_delete):
                 self.clean_bar.setValue(int(100 * i / max(1, len(to_delete))))
@@ -1141,14 +1164,14 @@ class Wizard(QMainWindow):
             try:
                 rc = subprocess.run(
                     ["gio", "trash", "--restore", "--", path],
-                    stdout=subprocess.DEVNULL,
+                    check=False, stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
                 ).returncode
                 if rc == 0:
                     restored += 1
                 else:
                     failed += 1
-            except Exception:
+            except Exception:  # noqa: BLE001
                 failed += 1
         QMessageBox.information(self, "Done",
                                 f"Restored {restored} file(s). {failed} failed.")
@@ -1213,7 +1236,7 @@ class Wizard(QMainWindow):
 
     def _test_admin_method(self):
         method = self._current_admin_method()
-        fd, out = tempfile.mkstemp(prefix="ai-cleaner-test-", suffix=".log")
+        fd, _out = tempfile.mkstemp(prefix="ai-cleaner-test-", suffix=".log")
         os.close(fd)
         if method == "terminal":
             term = find_terminal()
@@ -1233,7 +1256,7 @@ class Wizard(QMainWindow):
             os.chmod(tmp, 0o755)
             try:
                 subprocess.Popen(terminal_argv(term, tmp), close_fds=True)
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001
                 QMessageBox.critical(self, "Launch failed", str(e))
                 return
             QMessageBox.information(
@@ -1284,18 +1307,18 @@ class Wizard(QMainWindow):
             self.scanner.wait(1500)
         try:
             self.agent.save()
-        except Exception:
+        except Exception:  # noqa: BLE001, S110
             pass
         try:
             self.rules.save()
-        except Exception:
+        except Exception:  # noqa: BLE001, S110
             pass
         e.accept()
 
 
 # The wizard imports these directly from the modules above; the constants
 # are re-exported here for convenience of the delete loop.
-from ..protection import GAME_DIRS, GAME_PATH_HINTS, GAME_EXTS  # noqa: E402
+from ..protection import GAME_DIRS, GAME_EXTS, GAME_PATH_HINTS
 
 
 # ======================================================================
@@ -1316,7 +1339,7 @@ def main():
             with open(args.signal_file, "w") as f:
                 f.write(str(os.getpid()))
             _admin_log(f"child booted, pid={os.getpid()}, signal written")
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             _admin_log(f"child could not write signal: {e}")
 
     app = QApplication(sys.argv)

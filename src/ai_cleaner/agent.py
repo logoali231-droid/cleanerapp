@@ -1,12 +1,11 @@
 """Tabular Q-learning agent + synthetic training environment."""
 
 import math
-import os  # noqa: E402 (used by load)
+import os
 import pickle
 import random
 
 from .config import QTABLE_PATH
-from .protection import GAME_EXTS
 from .state import ext_bucket
 
 
@@ -30,17 +29,9 @@ class SyntheticFileEnv:
         age = self.rng.choices([0, 1, 2, 3, 4], weights=[15, 20, 20, 25, 20])[0]
 
         d = 0
-        if ext == 0 and loc in (0, 1) and age >= 2:
+        if ext == 0 and loc in (0, 1) and age >= 2 or ext == 2 and loc in (0, 2) and age >= 1 or ext == 1 and loc == 1 and age >= 3 or loc == 4:
             d = 1
-        elif ext == 2 and loc in (0, 2) and age >= 1:
-            d = 1
-        elif ext == 1 and loc == 1 and age >= 3:
-            d = 1
-        elif loc == 4:
-            d = 1
-        elif loc == 5:
-            d = 0
-        elif ext == 3 or loc == 3:
+        elif loc == 5 or ext == 3 or loc == 3:
             d = 0
         if self.rng.random() < 0.05:
             d = 1 - d
@@ -184,7 +175,7 @@ class QLearningAgent:
                     },
                     f,
                 )
-        except Exception:
+        except Exception:  # noqa: BLE001, S110
             pass
 
     def load(self, path=QTABLE_PATH):
@@ -203,7 +194,7 @@ class QLearningAgent:
             self.counts = counts
             self.conf_stats = d.get("conf_stats", {})
             return True
-        except Exception:
+        except Exception:  # noqa: BLE001
             return False
 
     def reset(self):

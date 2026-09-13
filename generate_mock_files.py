@@ -18,14 +18,13 @@ Usage:
     python3 generate_mock_files.py --path /tmp/ai_test
     python3 generate_mock_files.py --quick      # skip files over 10 MB
     python3 generate_mock_files.py --clean      # wipe the sandbox first
-"""
+"""  # noqa: EXE001
 
-import os
-import sys
-import shutil
 import argparse
-from pathlib import Path
+import os
+import shutil
 from datetime import datetime, timedelta
+from pathlib import Path
 
 # ----------------------------------------------------------------------
 # Content writers — realistic bytes for each file kind
@@ -36,9 +35,9 @@ def _write(p, data, days_ago):
     p.parent.mkdir(parents=True, exist_ok=True)
     with open(p, "wb") as f:
         f.write(data)
-        written = len(data)
+        len(data)
         # pad with zeroes up to size target (kept by caller via `size`)
-    ts = (datetime.now() - timedelta(days=days_ago)).timestamp()
+    ts = (datetime.now() - timedelta(days=days_ago)).timestamp()  # noqa: DTZ005
     os.utime(p, (ts, ts))
 
 
@@ -54,7 +53,7 @@ def _write_padded(p, header, size, days_ago):
                 n = min(len(chunk), rem)
                 f.write(chunk[:n])
                 rem -= n
-    ts = (datetime.now() - timedelta(days=days_ago)).timestamp()
+    ts = (datetime.now() - timedelta(days=days_ago)).timestamp()  # noqa: DTZ005
     os.utime(p, (ts, ts))
 
 
@@ -301,7 +300,7 @@ def build_sandbox(root: Path, quick=False):
     print(f"     🔍  Sniff tests    : {created['sniff']}   (should be skipped by sniffer)")
     print(f"     📐  Edge cases     : {created['edge']}")
     print(f"     📭  Empty/hidden   : {created['empty']}")
-    print(f"     ────────────────────────────")
+    print("     ────────────────────────────")
     print(f"     Total            : {total} files")
     print()
 

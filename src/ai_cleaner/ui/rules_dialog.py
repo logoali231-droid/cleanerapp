@@ -1,15 +1,24 @@
 """Manage all rules in one place."""
-from PyQt5.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QLabel, QTableWidget,
-    QTableWidgetItem, QCheckBox, QPushButton, QHeaderView,
-    QAbstractItemView, QWidget, QSpinBox, QDoubleSpinBox,
-)
 from PyQt5.QtCore import Qt, pyqtSignal
+from PyQt5.QtCore import Qt as _Qt
 from PyQt5.QtGui import QColor
+from PyQt5.QtWidgets import (
+    QAbstractItemView,
+    QCheckBox,
+    QDialog,
+    QDoubleSpinBox,
+    QHBoxLayout,
+    QHeaderView,
+    QLabel,
+    QPushButton,
+    QSpinBox,
+    QTableWidget,
+    QTableWidgetItem,
+    QVBoxLayout,
+    QWidget,
+)
 
 from .rule_editor import RuleEditor
-from PyQt5.QtCore import Qt as _Qt  # noqa: E402
-
 
 
 class RulesDialog(QDialog):

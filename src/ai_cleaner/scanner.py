@@ -22,6 +22,10 @@ from .state import extract_state, plain_reason
 # Change to taste. 30 is a good balance — recent ones stay safe.
 SCREENSHOT_MIN_AGE_DAYS = 30
 
+# ETA tuning
+ETA_ALPHA = 0.15           # EMA smoothing — lower = smoother, higher = more reactive
+ETA_WARMUP_FILES = 300     # don't show an ETA until this many files are scanned
+ETA_WARMUP_SECONDS = 2.0   # ...or this many seconds, whichever is later
 
 class ScannerThread(QThread):
     progress = pyqtSignal(
@@ -112,6 +116,10 @@ class ScannerThread(QThread):
         scanned = 0
         t0 = time.time()
         last_emit = 0.0
+        # Smoothed rate (files/sec). Starts as None so we can bootstrap
+        # on the first few samples instead of jumping from 0.
+        ema_rate = None
+        ema_t0 = None
 
         for dirpath, dirnames, filenames in os.walk(root, onerror=lambda e: None):
             if not self._running:
@@ -211,11 +219,36 @@ class ScannerThread(QThread):
 
                 now = time.time()
                 if now - last_emit > 0.15:
-                    elapsed = now - t0
-                    eta = 0.0
-                    if scanned > 0 and elapsed > 0:
-                        rate = scanned / elapsed
-                        eta = max(0, total - scanned) / rate if rate > 0 else 0.0
+                    # --- EMA-based rate estimate ---
+                    # Bootstrap on the first sample, then smooth.
+                    if ema_t0 is None:
+                        ema_t0 = now
+                    if ema_rate is None:
+                        # First real sample: use the raw average so far
+                        dt = now - ema_t0
+                        ema_rate = scanned / dt if dt > 0.1 else None
+                    elif scanned > 0:
+                        dt = now - ema_t0
+                        if dt > 0.2:
+                            instant_rate = scanned / max(now - t0, 0.1)
+                            ema_rate = (ETA_ALPHA * instant_rate
+                                        + (1 - ETA_ALPHA) * ema_rate)
+                            ema_t0 = now
+
+                    # --- ETA gating ---
+                    # Don't show an ETA until we've seen enough data.
+                    ready = (
+                        ema_rate is not None
+                        and ema_rate > 0
+                        and scanned >= ETA_WARMUP_FILES
+                        and (now - t0) >= ETA_WARMUP_SECONDS
+                    )
+                    if ready:
+                        remaining = max(0, total - scanned)
+                        eta = remaining / ema_rate
+                    else:
+                        eta = -1.0   # sentinel: warm-up
+
                     self.progress.emit(scanned, total, dirpath, eta, False)
                     last_emit = now
 

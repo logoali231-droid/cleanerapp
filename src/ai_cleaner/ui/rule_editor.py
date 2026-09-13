@@ -1,6 +1,6 @@
 """Dialog to add a single rule."""
 
-import os  # noqa: E402
+import os
 
 from PyQt5.QtWidgets import (
     QComboBox,
@@ -14,7 +14,6 @@ from PyQt5.QtWidgets import (
     QRadioButton,
     QVBoxLayout,
 )
-from PyQt5.QtWidgets import QDialog as _QD
 
 from ..config import HOME
 from ..protection import expand_user_path
