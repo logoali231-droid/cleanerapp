@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>com.dipper.AIFileCleaner</id>
+
+  <name>AI File Cleaner</name>
+  <summary>Find and remove unused files with a friendly AI</summary>
+
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-or-later</project_license>
+
+  <description>
+    <p>
+      AI File Cleaner scans your files and uses a small reinforcement-learning
+      agent to identify unused files and installation leftovers. It shows you
+      what it finds, protects your important data, and learns from every
+      keep/delete decision you make.
+    </p>
+    <p>Features:</p>
+    <ul>
+      <li>Reinforcement-learning decisions with dynamic confidence</li>
+      <li>Rule system — teach it once, it remembers</li>
+      <li>Trash-safe deletion — restore from Nemo if you change your mind</li>
+      <li>Protects games (Steam, Lutris, Heroic, PrismLauncher, Minecraft)</li>
+      <li>Protects system paths (/usr, /etc, /var/lib) and installed packages</li>
+      <li>Screenshot detection with configurable age</li>
+      <li>Content sniffing to never flag scripts or executables</li>
+      <li>Runs entirely on your machine. No network, no cloud.</li>
+    </ul>
+  </description>
+
+  <launchable type="desktop-id">com.dipper.AIFileCleaner.desktop</launchable>
+
+  <url type="homepage">https://github.com/logoali231-droid/cleanerapp</url>
+  <url type="bugtracker">https://github.com/logoali231-droid/cleanerapp/issues</url>
+  <url type="vcs-browser">https://github.com/logoali231-droid/cleanerapp</url>
+
+  <developer id="com.dipper">
+    <name>dipper</name>
+  </developer>
+
+  <content_rating type="oars-1.1"/>
+
+  <categories>
+    <category>Utility</category>
+    <category>System</category>
+    <category>FileTools</category>
+  </categories>
+
+  <keywords>
+    <keyword>cleaner</keyword>
+    <keyword>disk</keyword>
+    <keyword>cleanup</keyword>
+    <keyword>ai</keyword>
+    <keyword>files</keyword>
+    <keyword>junk</keyword>
+    <keyword>space</keyword>
+    <keyword>storage</keyword>
+  </keywords>
+
+  <branding>
+    <color type="primary" scheme_preference="light">#2f7ad6</color>
+    <color type="primary" scheme_preference="dark">#2868b8</color>
+  </branding>
+
+    <screenshots>
+    <screenshot type="default">
+      <image></image>
+      <caption>The review page — files the AI wants to clean up</caption>
+    </screenshot>
+  </screenshots>
+
+  <releases>
+    <release version="1.0.0" date="2026-09-13">
+      <description>
+        <p>First release.</p>
+        <ul>
+          <li>Reinforcement-learning file classifier</li>
+          <li>Rule system with in-app editor</li>
+          <li>Trash-safe deletion</li>
+          <li>Protects games, dev folders, and system paths</li>
+          <li>Screenshot cleanup</li>
+        </ul>
+      </description>
+    </release>
+  </releases>
+
+  <requires>
+    <display_length compare="ge">768</display_length>
+  </requires>
+
+  <recommends>
+    <control>keyboard</control>
+    <control>pointing</control>
+  </recommends>
+</component>
