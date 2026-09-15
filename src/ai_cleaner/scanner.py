@@ -6,31 +6,27 @@ from pathlib import Path
 
 from PyQt5.QtCore import QThread, pyqtSignal
 
+from .platform import normalize_path
 from .protection import (
     GAME_DIRS,
     GAME_EXTS,
     GAME_PATH_HINTS,
     in_pseudo_fs,
-    in_system_path,
     is_dpkg_owned,
     is_screenshot,
     sniff_file_kind,
 )
+from .system_protection import is_system_protected
 from .state import extract_state, plain_reason
 
-# Screenshots older than this many days get flagged automatically.
-# Change to taste. 30 is a good balance — recent ones stay safe.
 SCREENSHOT_MIN_AGE_DAYS = 30
+ETA_ALPHA = 0.15
+ETA_WARMUP_FILES = 300
+ETA_WARMUP_SECONDS = 2.0
 
-# ETA tuning
-ETA_ALPHA = 0.15           # EMA smoothing — lower = smoother, higher = more reactive
-ETA_WARMUP_FILES = 300     # don't show an ETA until this many files are scanned
-ETA_WARMUP_SECONDS = 2.0   # ...or this many seconds, whichever is later
 
 class ScannerThread(QThread):
-    progress = pyqtSignal(
-        int, int, str, float, bool
-    )  # scanned, total, cur, eta, counting
+    progress = pyqtSignal(int, int, str, float, bool)
     file_found = pyqtSignal(dict)
     finished_scan = pyqtSignal(list)
     status = pyqtSignal(str)
@@ -48,26 +44,24 @@ class ScannerThread(QThread):
 
     @staticmethod
     def _is_protected(path):
-        p = str(path).lower()
-        if any(g and g.lower() in p for g in GAME_DIRS):
+        """Hard protection always wins over AI and user rules."""
+        p = normalize_path(path)
+        if is_system_protected(path) or in_pseudo_fs(path):
+            return True
+        if any(g and normalize_path(g) in p for g in GAME_DIRS):
             return True
         if any(h in p for h in GAME_PATH_HINTS):
             return True
-        return path.suffix.lower() in GAME_EXTS
+        return Path(path).suffix.lower() in GAME_EXTS
 
     def _should_prune_dir(self, dirpath, dirname):
         full = os.path.join(dirpath, dirname)
-        if in_pseudo_fs(full):
+        if self._is_protected(full):
             return True
-        if in_system_path(full):
-            return True
-        if not self.deep_mode and dirname.startswith("."):  # noqa: SIM102
+        if not self.deep_mode and dirname.startswith("."):
             if dirname not in (".local", ".cache"):
                 return True
-        low = full.lower()
-        if any(g and g.lower() in low for g in GAME_DIRS):
-            return True
-        return bool(any(h in low for h in GAME_PATH_HINTS))
+        return False
 
     def _count_files(self, root):
         n = 0
@@ -92,15 +86,9 @@ class ScannerThread(QThread):
             return
         self.status.emit(f"Analyzing {total:,} files…")
 
-        # Read the user's screenshot-age preference once at scan start.
-        # 0 means "don't flag screenshots at all".
-
         screenshot_age_days = int(
             self.rules.settings.get("screenshot_min_age_days", SCREENSHOT_MIN_AGE_DAYS)
         )
-
-        # Confidence threshold: -1 = let the AI decide from its calibration;
-        # any other value = manual override. Log both so you can see it.
         manual = float(self.rules.settings.get("min_confidence", -1))
         if manual < 0:
             min_confidence = self.agent.dynamic_threshold()
@@ -116,8 +104,6 @@ class ScannerThread(QThread):
         scanned = 0
         t0 = time.time()
         last_emit = 0.0
-        # Smoothed rate (files/sec). Starts as None so we can bootstrap
-        # on the first few samples instead of jumping from 0.
         ema_rate = None
         ema_t0 = None
 
@@ -134,12 +120,22 @@ class ScannerThread(QThread):
                 scanned += 1
                 fpath = Path(dirpath) / fname
 
-                # 1. rules first
+                # 1. HARD PROTECTION FIRST.
+                if self._is_protected(fpath):
+                    continue
+
+                # 2. Package ownership protection on Debian-based Linux.
+                if is_dpkg_owned(fpath):
+                    continue
+
+                # 3. User rules may only act on paths that passed hard safety.
                 rule_action, rule = self.rules.match(fpath)
                 if rule_action == "protect":
                     continue
                 if rule_action == "flag":
                     try:
+                        if not fpath.is_file():
+                            continue
                         st = fpath.stat()
                         info = {
                             "path": str(fpath),
@@ -157,17 +153,9 @@ class ScannerThread(QThread):
                         pass
                     continue
 
-                # 2. hardcoded protection + sniffing
                 try:
                     if not fpath.is_file():
                         continue
-                    if self._is_protected(fpath):
-                        continue
-                    if in_system_path(fpath):
-                        continue
-                    if is_dpkg_owned(fpath):
-                        continue
-
                     kind, _preview = sniff_file_kind(fpath)
                     if kind in ("text-code", "binary-exec", "unreadable"):
                         continue
@@ -177,7 +165,6 @@ class ScannerThread(QThread):
                     age = (time.time() - st.st_mtime) / 86400.0
                     state = extract_state(fpath, size, age)
 
-                    # -- Screenshot shortcut: heuristic, not AI --
                     if (
                         screenshot_age_days > 0
                         and is_screenshot(fpath)
@@ -191,8 +178,7 @@ class ScannerThread(QThread):
                             "state": state,
                             "confidence": 999.0,
                             "reason": (
-                                f"An old screenshot "
-                                f"({int(age)} days) — probably no longer needed"
+                                f"An old screenshot ({int(age)} days) — probably no longer needed"
                             ),
                         }
                         results.append(info)
@@ -219,36 +205,28 @@ class ScannerThread(QThread):
 
                 now = time.time()
                 if now - last_emit > 0.15:
-                    # --- EMA-based rate estimate ---
-                    # Bootstrap on the first sample, then smooth.
                     if ema_t0 is None:
                         ema_t0 = now
                     if ema_rate is None:
-                        # First real sample: use the raw average so far
                         dt = now - ema_t0
                         ema_rate = scanned / dt if dt > 0.1 else None
                     elif scanned > 0:
                         dt = now - ema_t0
                         if dt > 0.2:
                             instant_rate = scanned / max(now - t0, 0.1)
-                            ema_rate = (ETA_ALPHA * instant_rate
-                                        + (1 - ETA_ALPHA) * ema_rate)
+                            ema_rate = (
+                                ETA_ALPHA * instant_rate
+                                + (1 - ETA_ALPHA) * ema_rate
+                            )
                             ema_t0 = now
 
-                    # --- ETA gating ---
-                    # Don't show an ETA until we've seen enough data.
                     ready = (
                         ema_rate is not None
                         and ema_rate > 0
                         and scanned >= ETA_WARMUP_FILES
                         and (now - t0) >= ETA_WARMUP_SECONDS
                     )
-                    if ready:
-                        remaining = max(0, total - scanned)
-                        eta = remaining / ema_rate
-                    else:
-                        eta = -1.0   # sentinel: warm-up
-
+                    eta = (max(0, total - scanned) / ema_rate) if ready else -1.0
                     self.progress.emit(scanned, total, dirpath, eta, False)
                     last_emit = now
 
