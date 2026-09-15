@@ -12,11 +12,11 @@ from .protection import (
     GAME_EXTS,
     GAME_PATH_HINTS,
     in_pseudo_fs,
-    in_system_path,
     is_dpkg_owned,
     is_screenshot,
     sniff_file_kind,
 )
+from .system_protection import is_system_protected
 from .state import extract_state, plain_reason
 
 SCREENSHOT_MIN_AGE_DAYS = 30
@@ -46,13 +46,13 @@ class ScannerThread(QThread):
     def _is_protected(path):
         """Hard protection always wins over AI and user rules."""
         p = normalize_path(path)
-        if in_pseudo_fs(path) or in_system_path(path):
+        if is_system_protected(path) or in_pseudo_fs(path):
             return True
         if any(g and normalize_path(g) in p for g in GAME_DIRS):
             return True
         if any(h in p for h in GAME_PATH_HINTS):
             return True
-        return path.suffix.lower() in GAME_EXTS
+        return Path(path).suffix.lower() in GAME_EXTS
 
     def _should_prune_dir(self, dirpath, dirname):
         full = os.path.join(dirpath, dirname)
@@ -121,7 +121,6 @@ class ScannerThread(QThread):
                 fpath = Path(dirpath) / fname
 
                 # 1. HARD PROTECTION FIRST.
-                # Nothing can override Windows/Linux system/game protection.
                 if self._is_protected(fpath):
                     continue
 
