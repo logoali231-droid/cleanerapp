@@ -20,7 +20,7 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt pyinstaller
       - name: Build
-        run: python -m PyInstaller --noconfirm --clean --windowed --name "AI File Cleaner" --paths src src/ai_cleaner/__main__.py
+        run: python -m PyInstaller --noconfirm --clean --windowed --name "AI File Cleaner" --paths src src/windows_entry.py
       - name: Archive
         shell: pwsh
         run: Compress-Archive -Path "dist/AI File Cleaner/*" -DestinationPath "AI-File-Cleaner-Windows.zip"
