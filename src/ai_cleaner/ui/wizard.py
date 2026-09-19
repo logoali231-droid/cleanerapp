@@ -41,6 +41,7 @@ from ..config import CONFIG_DIR, HOME, IS_ROOT
 from ..demo import create_demo_files
 from ..rules import RulesManager
 from ..scanner import ScannerThread
+from ..training import apply_training, load_training_file
 from ..utils import age, duration, human, short_path
 from .rules_dialog import RulesDialog
 from .styles import QSS
@@ -52,7 +53,9 @@ class Wizard(QMainWindow):
 
     def __init__(self, admin_mode=False, start_folder=None, start_deep=False):
         super().__init__()
-        self.setWindowTitle("AI File Cleaner" + ("  —  Administrator" if IS_ROOT else ""))
+        base_title = "AI File Cleaner" + ("  —  Administrator" if IS_ROOT else "")
+        self.setWindowTitle(base_title)
+        self._base_title = base_title
         self.setWindowIcon(self._app_icon())
         self.setGeometry(120, 80, 1100, 760)
         self.setMinimumSize(940, 620)
@@ -70,6 +73,9 @@ class Wizard(QMainWindow):
         self.deep_mode = False
         self._last_trashed = []
 
+        self.setAcceptDrops(True)
+        self._base_title = self.windowTitle()
+
         self._build_menu()
         self._build_ui()
 
@@ -81,6 +87,97 @@ class Wizard(QMainWindow):
             if start_deep:
                 self.deep_check.setChecked(True)
             QTimer.singleShot(400, self._start_scan)
+
+        # =========================================================== training import
+    def _import_training_file_dialog(self):
+        d = QFileDialog.getOpenFileName(
+            self, "Pick a training file", HOME,
+            "Training data (*.csv *.tsv *.json);;All files (*)")
+        if not d or not d[0]:
+            return
+        self._import_training_file(Path(d[0]))
+
+    def _import_training_file(self, path: Path):
+        # --- parse ---
+        try:
+            examples = load_training_file(path)
+        except Exception as e:  # noqa: BLE001
+            QMessageBox.critical(
+                self, "Couldn't read training file",
+                f"{type(e).__name__}: {e}\n\n"
+                "See Tools → Show training format help for the expected format.")
+            return
+
+        if not examples:
+            QMessageBox.information(
+                self, "No usable rows",
+                f"Parsed {path.name} but found no valid training rows.\n\n"
+                "See Tools → Show training format help for the expected format.")
+            return
+
+        # --- ask before applying ---
+        n_delete = sum(1 for _, label, _ in examples if label == 1)
+        n_keep = len(examples) - n_delete
+        reply = QMessageBox.question(
+            self, "Import training data",
+            f"File: {path.name}\n\n"
+            f"Valid examples: {len(examples):,}\n"
+            f"  • labeled DELETE : {n_delete:,}\n"
+            f"  • labeled KEEP   : {n_keep:,}\n\n"
+            "This will nudge the AI's Q-table on all these examples.\n"
+            "Existing learning is preserved, not overwritten.\n\n"
+            "Train now?",
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes)
+        if reply != QMessageBox.Yes:
+            return
+
+        # --- apply ---
+        QApplication.setOverrideCursor(Qt.WaitCursor)
+        try:
+            applied = apply_training(self.agent, examples)
+            self.agent.save()
+        except Exception as e:  # noqa: BLE001
+            QApplication.restoreOverrideCursor()
+            import traceback
+            traceback.print_exc()
+            QMessageBox.critical(self, "Training failed",
+                                 f"{type(e).__name__}: {e}")
+            return
+        QApplication.restoreOverrideCursor()
+
+        self._refresh_agent_info()
+        self._log(f"Imported {applied:,} training examples from {path.name}")
+
+        QMessageBox.information(
+            self, "Training complete",
+            f"Applied {applied:,} examples.\n\n"
+            f"AI state: {self.agent.visited_states():,} situations known.\n"
+            f"Calibration: {self.agent.calibration_summary()}")
+
+    def _show_training_help(self):
+        QMessageBox.information(
+            self, "Training data format",
+            "Drop a CSV, TSV, or JSON file onto the window (or use "
+            "Tools → Import training data).\n\n"
+
+            "The file needs one row per file example, with these fields:\n\n"
+
+            "  • extension    e.g. .deb   jpg   .zip\n"
+            "  • size_bytes   e.g. 15000000\n"
+            "  • age_days     e.g. 220\n"
+            "  • location     e.g. /tmp/foo  or  /home/u/Downloads\n"
+            "  • label        1 = delete this file, 0 = keep it\n\n"
+
+            "Optional: weight  — scales this row's influence (default 1.0)\n\n"
+
+            "If you already have bucketed data, you can skip the raw\n"
+            "fields and provide: ext_bucket, size_bucket, age_bucket,\n"
+            "loc_bucket instead.\n\n"
+
+            "Example CSV:\n"
+            "  extension,size_bytes,age_days,location,label\n"
+            "  .deb,15000000,220,/tmp,1\n"
+            "  .jpg,4000000,8,/home/u/Pictures,0")
 
     # ============================================================== icon
     def _app_icon(self):
@@ -96,6 +193,38 @@ class Wizard(QMainWindow):
         p.end()
         return QIcon(pm)
 
+        # =========================================================== drag-drop
+    TRAINING_EXTS = (".csv", ".tsv", ".json")
+
+    def _drag_training_file(self, event):
+        if not event.mimeData().hasUrls():
+            return None
+        for url in event.mimeData().urls():
+            if not url.isLocalFile():
+                continue
+            p = Path(url.toLocalFile())
+            if p.suffix.lower() in self.TRAINING_EXTS:
+                return p
+        return None
+
+    def dragEnterEvent(self, event):
+        if self._drag_training_file(event):
+            event.acceptProposedAction()
+            self.setWindowTitle("📥  Drop to import training data…")
+        else:
+            event.ignore()
+
+    def dragLeaveEvent(self, event):
+        self.setWindowTitle(self._base_title)
+
+    def dropEvent(self, event):
+        self.setWindowTitle(self._base_title)
+        p = self._drag_training_file(event)
+        if not p:
+            return
+        event.acceptProposedAction()
+        self._import_training_file(p)
+
     # ============================================================== menu
     def _build_menu(self):
         m = self.menuBar()
@@ -109,6 +238,12 @@ class Wizard(QMainWindow):
         t.addSeparator()
         t.addAction("Retrain AI from scratch", lambda: self._train_agent(20000))
         t.addAction("Reset AI learning", self._reset_agent)
+
+        t.addSeparator()
+        t.addAction("Import training data (CSV/JSON)…",
+        self._import_training_file_dialog)
+        t.addAction("Show training format help", self._show_training_help)
+
         t.addSeparator()
         if not IS_ROOT:
             t.addAction("Relaunch as administrator…", self._relaunch_admin)
