@@ -30,6 +30,10 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 
+from ai_cleaner.training import apply_training, load_training_file
+from ai_cleaner.training.session import TrainingSession
+from ai_cleaner.ui.training_dialog import TrainingDialog
+
 from ..admin import (
     _admin_log,
     find_terminal,
@@ -41,7 +45,6 @@ from ..config import CONFIG_DIR, HOME, IS_ROOT
 from ..demo import create_demo_files
 from ..rules import RulesManager
 from ..scanner import ScannerThread
-from ..training import apply_training, load_training_file
 from ..utils import age, duration, human, short_path
 from .rules_dialog import RulesDialog
 from .styles import QSS
@@ -92,93 +95,51 @@ class Wizard(QMainWindow):
     def _import_training_file_dialog(self):
         d = QFileDialog.getOpenFileName(
             self, "Pick a training file", HOME,
-            "Training data (*.csv *.tsv *.json);;All files (*)")
+                        "Training data (*.csv *.tsv *.json *.jsonl *.ndjson "
+            "*.parquet *.pq *.xlsx *.xls *.db *.sqlite *.sqlite3);;All files (*)")
         if not d or not d[0]:
             return
         self._import_training_file(Path(d[0]))
 
     def _import_training_file(self, path: Path):
-        # --- parse ---
-        try:
-            examples = load_training_file(path)
-        except Exception as e:  # noqa: BLE001
+        session = TrainingSession(path)
+        if session.load_error:
             QMessageBox.critical(
-                self, "Couldn't read training file",
-                f"{type(e).__name__}: {e}\n\n"
-                "See Tools → Show training format help for the expected format.")
+                self, "Couldn't read file",
+                f"{type(session.load_error).__name__}: {session.load_error}")
             return
-
-        if not examples:
+        if not session.rows:
             QMessageBox.information(
-                self, "No usable rows",
-                f"Parsed {path.name} but found no valid training rows.\n\n"
-                "See Tools → Show training format help for the expected format.")
+                self, "No data",
+                f"{path.name} contained no usable rows.")
             return
 
-        # --- ask before applying ---
-        n_delete = sum(1 for _, label, _ in examples if label == 1)
-        n_keep = len(examples) - n_delete
-        reply = QMessageBox.question(
-            self, "Import training data",
-            f"File: {path.name}\n\n"
-            f"Valid examples: {len(examples):,}\n"
-            f"  • labeled DELETE : {n_delete:,}\n"
-            f"  • labeled KEEP   : {n_keep:,}\n\n"
-            "This will nudge the AI's Q-table on all these examples.\n"
-            "Existing learning is preserved, not overwritten.\n\n"
-            "Train now?",
-            QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes)
-        if reply != QMessageBox.Yes:
-            return
-
-        # --- apply ---
-        QApplication.setOverrideCursor(Qt.WaitCursor)
-        try:
-            applied = apply_training(self.agent, examples)
-            self.agent.save()
-        except Exception as e:  # noqa: BLE001
-            QApplication.restoreOverrideCursor()
-            import traceback
-            traceback.print_exc()
-            QMessageBox.critical(self, "Training failed",
-                                 f"{type(e).__name__}: {e}")
-            return
-        QApplication.restoreOverrideCursor()
-
-        self._refresh_agent_info()
-        self._log(f"Imported {applied:,} training examples from {path.name}")
-
-        QMessageBox.information(
-            self, "Training complete",
-            f"Applied {applied:,} examples.\n\n"
-            f"AI state: {self.agent.visited_states():,} situations known.\n"
-            f"Calibration: {self.agent.calibration_summary()}")
-
+        dlg = TrainingDialog(session, self.agent, self)
+        if dlg.exec_() == dlg.Accepted:
+            self._refresh_agent_info()
+            self._log(f"Imported training data from {path.name}")
     def _show_training_help(self):
         QMessageBox.information(
             self, "Training data format",
-            "Drop a CSV, TSV, or JSON file onto the window (or use "
-            "Tools → Import training data).\n\n"
+            "Drop a file onto the window, or use Tools → Import training data.\n\n"
 
-            "The file needs one row per file example, with these fields:\n\n"
+            "Supported formats: CSV, TSV, JSON, JSONL, NDJSON, "
+            "Parquet, Excel, SQLite.\n\n"
 
-            "  • extension    e.g. .deb   jpg   .zip\n"
-            "  • size_bytes   e.g. 15000000\n"
-            "  • age_days     e.g. 220\n"
-            "  • location     e.g. /tmp/foo  or  /home/u/Downloads\n"
-            "  • label        1 = delete this file, 0 = keep it\n\n"
+            "Required columns (name-flexible, auto-detected):\n"
+            "  • extension (or ext, file_type, …)\n"
+            "  • size_bytes (or size, file_size, …)\n"
+            "  • age_days (or age, days_old, …)\n"
+            "  • location (or path, directory, folder, …)\n"
+            "  • label (1=delete, 0=keep)\n\n"
 
-            "Optional: weight  — scales this row's influence (default 1.0)\n\n"
+            "Optional: weight (default 1.0)\n\n"
 
-            "If you already have bucketed data, you can skip the raw\n"
-            "fields and provide: ext_bucket, size_bucket, age_bucket,\n"
-            "loc_bucket instead.\n\n"
+            "Or supply pre-bucketed data with these instead:\n"
+            "  ext_bucket, size_bucket, age_bucket, loc_bucket\n\n"
 
-            "Example CSV:\n"
-            "  extension,size_bytes,age_days,location,label\n"
-            "  .deb,15000000,220,/tmp,1\n"
-            "  .jpg,4000000,8,/home/u/Pictures,0")
-
+            "The dialog auto-maps columns. You can override any mapping\n"
+            "in the import window if detection got it wrong.")
     # ============================================================== icon
     def _app_icon(self):
         pm = QPixmap(64, 64)
